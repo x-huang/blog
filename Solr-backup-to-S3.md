@@ -1,10 +1,10 @@
 This article discusses how to backup SolrCloud collections to S3 storage. It was inspired by a Solr [jira ticket thread](https://issues.apache.org/jira/browse/SOLR-9952), also refers to [official Solr doc](https://lucene.apache.org/solr/guide/8_5/collection-management.html#backup).
 
-Since version 7 Solr already supports to backup collection to HDFS location, however official doc does not explicitly mention how to backup to S3 storage. Luckily, because HDFS has integrated S3 file systems, it doesn't require further dev work to make S3 applicable as backup repository. The only problem is Solr officials release doesn't support S3 out of the box, we just need to make a bit tweaking to add missing dependencies. 
+Since version 7 Solr already supports to backup collection to HDFS location. However official doc does not explicitly mention how to backup to S3 storage, neither can you use S3 as a backup repository using official Solr release out-of-the-box. Luckily, because HDFS has integrated S3 file systems, it doesn't require further dev work to make S3 applicable. We just need to tweak a little bit to add missing dependencies. 
 
 ## Setup
 
-Take the mostrecent Solr release 8.5.0 as example, here shows the steps to create a S3 enabled Solr release package:
+Take the most recent Solr release, version 8.5.0 (up to May, 2020), as example, here are the steps to create a S3 enabled Solr release package:
 
 1. Download and untarnished `solr-8.5.0.tgz`
 
@@ -33,7 +33,9 @@ Take the mostrecent Solr release 8.5.0 as example, here shows the steps to creat
 
 5. Install Solr using this tar ball.
 
-To configure Hadoop HDFS, put this `core-site.xml` file to any location on disk, preferably `<solr_dir>/data`.
+Alternatively you can install Solr in normal way and add `solr.xml` and the two jar files to specific location on each Solr node seperately.
+
+To configure Hadoop HDFS, put this `core-site.xml` file to any location on disk, preferably `<solr_dir>/data`. This location will be used in calling Solr backup API .
 
 ```xml
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
@@ -88,13 +90,17 @@ To configure Hadoop HDFS, put this `core-site.xml` file to any location on disk,
 </configuration>
 ```
 
+Please materialize `YOUR_S3_BUCKET`,  `YOUR_S3_ACCESS_KEY` and `YOUR_S3_SECRET_KEY` with your own settings. 
+
 Now start Solr with the following command line arguments
 
 ```
 -Dsolr.hdfs.default.backup.path=<my_path> -Dsolr.hdfs.home=s3a://<my_s3_bucket>/ -Dsolr.hdfs.confdir=<solr_dir>/data
 ```
 
-Note that the file system URI scheme `s3a` is crucial here. Compared with its predecessor `s3n`,  `s3a` supports larger file (>5GB), has higher performance and uses multi-part upload to speed up data transportation.  
+where `solr.hdfs.confdir` shall point to the local directory where you put the file `core-site.xml`.
+
+Note that the file system URI scheme `s3a` is crucial here . Compared with its predecessor `s3n`,  `s3a` supports larger file (>5GB), has higher performance and uses multi-part upload to speed up data transportation.  Supposedly `s3a` is superior to `s3n` in any aspect but I haven't benchmarked their performance though.
 
 ## Backup
 
@@ -103,13 +109,13 @@ Before backup, make sure s3 directory `s3://<my_s3_bucket>/<my_path>` does exist
 You can invoke collection backup API synchronously:
 
 ```
-curl 'localhost:8983/solr/admin/collections?action=BACKUP&name=my-backup&collection=my-collection&location=/my-path&repository=hdfs'
+curl 'localhost:8983/solr/admin/collections?action=BACKUP&name=my_backup&collection=my_collection&location=/my_path&repository=hdfs'
 ```
 
 or asynchronously:
 
 ```
-curl 'localhost:8983/solr/admin/collections?action=BACKUP&name=my-backup&collection=my-collection&location=/my-path&repository=hdfs&async=my-request-id'
+curl 'localhost:8983/solr/admin/collections?action=BACKUP&name=my_backup&collection=my_collection&location=/my_path&repository=hdfs&async=my-request-id'
 ```
 
 and backup status by:
@@ -118,16 +124,16 @@ and backup status by:
 curl 'localhost:8983/solr/admin/collections?action=REQUESTSTATUS&requestid=my-request-id'
 ```
 
-Either way it will backup Solr collection data and metadata to `s3://my_s3_bucket/my-path/my-backup`. You can open the file `backup.properties` to read the summary of this backup.
+Either way it will backup Solr collection data and metadata to `s3://my_s3_bucket/my_path/my_backup`. You can open the file `backup.properties` to read the summary of this backup.
 
 ## Restore
 
 Invoke the restoration:
 
 ```
-curl 'localhost:8983/solr/admin/collections?action=RESTORE&name=my-backup&location=/my-path&collection=my-another-collection'
+curl 'localhost:8983/solr/admin/collections?action=RESTORE&name=my_backup&location=/my_path&collection=my_another_collection'
 ```
 
-Note that `my-another-collection` cannot be existing.
+Note that `my_another_collection` cannot be existing before restoring.
 
-It will restore and duplicate the Solr collection in previous step. Happy searching!
+It will restore and duplicate the Solr collection to newly created `my_another_collection`. Happy searching!
